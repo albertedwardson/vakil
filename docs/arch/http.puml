@@ -1,0 +1,54 @@
+@startuml http
+
+scale 1920*1080
+
+actor Upstream
+participant "HTTP Proxy Module" as P
+participant "Routing Engine" as R
+participant "Plugin Modules" as PM
+actor Downstream
+
+== Request path ==
+Upstream -> P : HTTP Request
+P -> R : Early routing request
+
+R -> PM : `on_route` (plugins)
+PM --> R : route decision
+
+alt route decision -> forward
+    R -> PM : `on_request_headers` / `on_request_body`
+    loop while plugin middleware
+        PM -> PM : Inspect / modify / short-circuit request
+    end
+    PM --> R : middleware outcome
+    R -> Downstream : Forward HTTP request
+else route or middleware -> local reply
+    R -> PM : `on_request_headers` (plugins handle locally)
+    PM --> R : local reply / reject / redirect
+    R -> P : Instruct local response
+    P -> Upstream : HTTP Response
+end
+
+== Response path ==
+Downstream -> R : HTTP Response
+R -> MW : Pass response back through middlewares
+
+loop while MWs
+    MW -> MW : Inspect / modify / short-circuit response
+end
+
+MW -> P : Return final response
+P -> Upstream : HTTP Response
+
+== Error handling ==
+alt downstream error
+    Downstream ->x R : Connection failure / timeout
+    R -> MW : Signal upstream-facing error
+    loop while MWs
+        MW -> MW : Handle/ignore error
+    end
+    MW -> P : Transform or pass error
+    P -> Upstream : HTTP response or forward downstream failure
+end
+
+@enduml

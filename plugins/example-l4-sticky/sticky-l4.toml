@@ -1,0 +1,11 @@
+# Example sticky L4 load balancer configuration.
+ttl_secs = 900
+fallback_backends = ["127.0.0.1:9001", "127.0.0.1:9002"]
+
+[[listeners]]
+name = "listener-a"
+backends = ["127.0.0.1:9101", "127.0.0.1:9102"]
+
+[[listeners]]
+name = "listener-b"
+backends = ["127.0.0.1:9201", "127.0.0.1:9202"]

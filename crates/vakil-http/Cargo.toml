@@ -1,0 +1,19 @@
+[package]
+name = "vakil-http"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait = "0.1"
+bytes = "1"
+pingora = { version = "0.8", features = ["proxy"] }
+pingora-core = "0.8"
+pingora-http = "0.8"
+pingora-proxy = "0.8"
+http = "1"
+tokio = { version = "1", features = ["full"] }
+log = { workspace = true }
+libc = "0.2"
+vakil-plugin-sys = { workspace = true }
+anyhow = "1.0.102"
+pingora-error = "0.8.1"

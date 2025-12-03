@@ -1,0 +1,22 @@
+[package]
+name = "vakil-tests"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+vakil-http = { workspace = true }
+vakil-tests-common = { workspace = true }
+vakil-plugin-api = { workspace = true }
+vakil-plugin-host = { workspace = true }
+vakil-plugin-sys = { workspace = true }
+vakil-l4 = {workspace = true}
+
+# These crates are used directly by the test code (match versions used by the workspace crates)
+pingora-core = "0.8"
+pingora-proxy = "0.8"
+async-trait = "0.1"
+http = "1"
+pingora-http = "0.8"
+bytes = "1"
+stabby = "72.1.1"
+libc = "0.2"

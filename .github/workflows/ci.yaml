@@ -1,0 +1,61 @@
+---
+name: Rust CI
+
+on:
+    push:
+        branches: [main]
+        tags: ['*']
+        paths-ignore: [README.md, docs/**]
+    pull_request:
+        paths-ignore: [README.md, docs/**]
+    workflow_dispatch:
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+    cancel-in-progress: true
+env:
+    CARGO_INCREMENTAL: 0
+    CARGO_NET_GIT_FETCH_WITH_CLI: true
+    CARGO_NET_RETRY: 10
+    CARGO_TERM_COLOR: always
+    RUST_BACKTRACE: 1
+    RUSTFLAGS: -D warnings
+    RUSTUP_MAX_RETRIES: 10
+    CARGO_LLVM_COV_DENY_WARNINGS: 1
+
+jobs:
+    cargo-fmt-clippy:
+        name: cargo fmt & clippy
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  persist-credentials: false
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
+            - uses: dtolnay/rust-toolchain@stable
+              with:
+                  components: rustfmt, clippy
+            - name: Lint (rustfmt)
+              run: cargo fmt --all --check
+            - name: Lint (clippy)
+              run: cargo clippy --workspace --all-targets --all-features --locked
+    tests:
+        name: tests
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  save-if: ${{ github.ref == 'refs/heads/main' }}
+            - name: Install cargo-llvm-cov
+              uses: taiki-e/install-action@v2
+              with:
+                  tool: cargo-nextest, cargo-llvm-cov
+            - name: Run tests
+              run: cargo llvm-cov nextest --workspace --all-features --fail-under-lines 80

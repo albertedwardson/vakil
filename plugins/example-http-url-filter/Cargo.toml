@@ -1,0 +1,14 @@
+[package]
+name = "example-http-url-filter"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ada-url = "3"
+vakil-plugin-api = { path = "../../crates/vakil-plugin-api" }
+vakil-plugin-sys = { path = "../../crates/vakil-plugin-sys" }
+stabby = "72"
+log = { workspace = true }

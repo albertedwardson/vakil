@@ -1,0 +1,8 @@
+[package]
+name = "vakil-plugin-api"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+stabby = "72"
+vakil-plugin-sys = { workspace = true }

@@ -1,0 +1,26 @@
+[package]
+name = "vakil-runtime"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+pingora-core = "0.8"
+stabby = "72.1.1"
+vakil-plugin-host = { workspace = true }
+vakil-plugin-api = { workspace = true }
+vakil-plugin-sys = { workspace = true }
+vakil-http = { workspace = true }
+vakil-l4 = { workspace = true }
+async-trait = "0.1"
+bytes = "1"
+pingora-http = "0.8"
+pingora-proxy = "0.8"
+pingora-error = "0.8"
+rama = "0.2"
+log = { workspace = true }
+rand = "0.10"
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+tempfile = "3.20"

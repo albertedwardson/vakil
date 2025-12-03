@@ -1,0 +1,20 @@
+[package]
+name = "vakil-l4"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait = "0.1"
+libc = "0.2"
+stabby = "72"
+anyhow = "1"
+tokio = { version = "1", features = ["full"] }
+bytes = "1"
+rama = "0.2"
+rama-core = "0.2"
+rama-net = "0.2"
+rama-tcp = "0.2"
+rama-udp = "0.2"
+rand = "0.10"
+vakil-plugin-sys = { workspace = true }
+log = { workspace = true }

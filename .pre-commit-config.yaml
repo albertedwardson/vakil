@@ -1,0 +1,38 @@
+---
+
+repos:
+    - repo: local
+      hooks:
+          - id: spelling
+            name: Check for spelling errors
+            entry: codespell
+            language: system
+            pass_filenames: false
+          - id: cargo-fmt
+            name: Check Rust formatting
+            entry: cargo +nightly fmt --all
+            language: system
+            pass_filenames: false
+          - id: cargo-clippy
+            name: Run Rust clippy
+            entry: cargo clippy --workspace --all-targets --all-features -- -D warnings
+            language: system
+            pass_filenames: false
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v6.0.0
+      hooks:
+          - id: end-of-file-fixer
+          - id: trailing-whitespace
+    - repo: https://github.com/adrienverge/yamllint.git
+      rev: v1.38.0
+      hooks:
+          - id: yamllint
+            args: [--format, parsable, --strict, -d, '{rules: {truthy: {check-keys: false}}}']
+    - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
+      rev: 0.2.3
+      hooks:
+          - id: yamlfmt
+    - repo: https://github.com/rhysd/actionlint
+      rev: v1.7.10
+      hooks:
+          - id: actionlint

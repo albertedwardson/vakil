@@ -1,0 +1,12 @@
+[package]
+name = "vakil-plugin-host"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libloading = "0.9"
+anyhow = "1"
+stabby = { version = "72.1.1", features = ["libloading"] }
+vakil-plugin-api = { workspace = true }
+vakil-plugin-sys = { workspace = true }
+log = { workspace = true }

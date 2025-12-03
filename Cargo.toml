@@ -1,0 +1,47 @@
+[workspace]
+members = [
+    "crates/*",
+    "plugins/*",
+]
+resolver = "2"
+
+[workspace.package]
+description = "Pluggable reverse-proxy and traffic filtering system with L7 HTTP middleware and L4 filters"
+version = "0.0.1"
+edition = "2024"
+
+[workspace.metadata.bin]
+cargo-nextest = { version = "^0.9", locked = true }
+cargo-llvm-cov = { version = "^0.8" }
+
+[workspace.dependencies]
+vakil-plugin-api = { path = "crates/vakil-plugin-api" }
+vakil-plugin-host = { path = "crates/vakil-plugin-host" }
+vakil-plugin-sys = { path = "crates/vakil-plugin-sys" }
+vakil-http = { path = "crates/vakil-http" }
+vakil-l4 = { path = "crates/vakil-l4" }
+vakil-runtime = { path = "crates/vakil-runtime" }
+vakil-cli = { path = "crates/vakil-cli" }
+
+vakil-tests-common = { path = "crates/vakil-tests-common" }
+
+log = "0.4"
+env_logger = "0.11"
+
+[workspace.lints.clippy]
+# 1. Enable default and strict-but-helpful lints
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+# 2. Disable overly pedantic, noisy, or opinionated lints
+missing_errors_doc = "allow"       # Annoying if you don't need strict public docs
+missing_panics_doc = "allow"       # Forces docs for every assert/unwrap
+must_use_candidate = "allow"       # Suggests #[must_use] on almost every function
+module_name_repetitions = "allow"  # Triggers on things like `foo::FooError`
+cast_possible_truncation = "allow" # Too noisy if you frequently cast numeric types
+
+# 3. Cherry-pick the best "Restriction" lints for code quality
+todo = "warn"                      # Catches leftover development placeholders
+panic = "warn"                     # Highlights points where the application can crash
+unwrap_used = "warn"               # Forces explicit error handling or .expect()
+dbg_macro = "warn"                 # Prevents committing debug print statements

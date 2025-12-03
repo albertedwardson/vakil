@@ -1,0 +1,21 @@
+[package]
+name = "example-l4-sticky"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+xxhash-rust = { version = "0.8", package = "xxhash-rust", features = ["xxh3"] }
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+vakil-plugin-api = { path = "../../crates/vakil-plugin-api" }
+vakil-plugin-sys = { path = "../../crates/vakil-plugin-sys" }
+stabby = "72"
+log = { workspace = true }
+
+[dev-dependencies]
+libloading = "0.9"
+tempfile = "3"
+vakil-plugin-host = { workspace = true }

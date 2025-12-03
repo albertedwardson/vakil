@@ -1,0 +1,15 @@
+[package]
+name = "vakil-plugin-sys"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+stabby = "72"
+rand = "0.10"
+pingora-http = { version = "0.8", optional = true }
+pingora-core = { version = "0.8", optional = true }
+pingora-proxy =  { version = "0.8", optional = true }
+
+[features]
+default = ["pingora"]
+pingora = ["pingora-http", "pingora-proxy", "pingora-core"]

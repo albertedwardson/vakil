@@ -1,0 +1,31 @@
+@startuml C4Context
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+HIDE_STEREOTYPE()
+
+title C4 System Diagram — Programmable Reverse Proxy
+
+Person(httpClient, "HTTP(S) Client", "Browser, REST, gRPC, or WebSocket client")
+Person(tcpClient, "TCP Client", "SSH, MySQL, or other TCP clients")
+Person(udpClient, "UDP Client", "DNS resolver, QUIC, or game client")
+
+System_Ext(downstream, "Downstream","HTTP/gRPC/TCP/UDP services")
+
+System_Boundary(proxySystem, "Reverse Proxy Platform") {
+    System(proxyDataPlane, "Proxy Data Plane","Handles TLS termination, HTTP routing, TCP/UDP forwarding, WebSockets, gRPC, rate limiting and circuit breaking")
+    System(runtime, "Runtime Engine", "Plugins are loaded into proxy instances at startup")
+}
+
+System_Ext(pluginModules, "Plugin Modules", "Middleware, routing hooks, L4 filters loaded at startup")
+
+Rel(pluginModules, runtime, "Loaded by")
+
+Rel(httpClient, proxyDataPlane, "HTTP/HTTPS, gRPC, WebSocket requests")
+Rel(tcpClient, proxyDataPlane, "TCP streams (SNI or port routing)")
+Rel(udpClient, proxyDataPlane, "UDP datagrams")
+
+Rel(runtime, proxyDataPlane, "Evaluates rules, filters and config defined in loaded plugins")
+
+Rel(proxyDataPlane, downstream,"Forward proxied traffic\nHTTP / gRPC / TCP / UDP")
+
+@enduml
