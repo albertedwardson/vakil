@@ -17,7 +17,7 @@ bytes = "1"
 pingora-http = "0.8"
 pingora-proxy = "0.8"
 pingora-error = "0.8"
-rama = "0.2"
+rama = "0.3.0-alpha.4"
 log = { workspace = true }
 rand = "0.10"
 tokio = { version = "1", features = ["full"] }

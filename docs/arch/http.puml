@@ -4,7 +4,7 @@ scale 1920*1080
 
 actor Upstream
 participant "HTTP Proxy Module" as P
-participant "Routing Engine" as R
+participant "Proxy core" as R
 participant "Plugin Modules" as PM
 actor Downstream
 

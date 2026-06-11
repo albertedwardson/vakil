@@ -1,6 +1,10 @@
 use anyhow::{Result, anyhow};
-use log::error;
-use rama_core::{Context, Service};
+use async_trait::async_trait;
+use log::{debug, error};
+use rama::error::BoxError;
+use rama_core::Service;
+use rama_tcp::{TcpStream, server::TcpListener};
+use rama_udp::UdpSocket;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -8,10 +12,6 @@ use vakil_plugin_sys::{
     ConnectionInfo, FlowDirection, ID, SocketAddress, TCPContext, TransportContext,
     TransportProtocol, UDPContext,
 };
-
-use async_trait::async_trait;
-use rama_tcp::{TcpStream, server::TcpListener};
-use rama_udp::UdpSocket;
 
 #[async_trait]
 pub trait TcpProxyHooks: Send + Sync {
@@ -50,6 +50,7 @@ impl TcpProxyHooks for NoopProxyHooks {}
 #[async_trait]
 impl UdpProxyHooks for NoopProxyHooks {}
 
+#[derive(Debug)]
 pub struct TcpProxyService<H = NoopProxyHooks> {
     hooks: Arc<H>,
 }
@@ -62,15 +63,15 @@ impl<H> TcpProxyService<H> {
     }
 }
 
-impl<H, S> Service<S, TcpStream> for TcpProxyService<H>
+impl<H> Service<TcpStream> for TcpProxyService<H>
 where
     H: TcpProxyHooks + Send + Sync + 'static,
-    S: Send + Sync + 'static,
 {
-    type Response = ();
+    type Output = ();
     type Error = anyhow::Error;
 
-    async fn serve(&self, _ctx: Context<S>, stream: TcpStream) -> Result<()> {
+    async fn serve(&self, stream: TcpStream) -> Result<(), Self::Error> {
+        debug!("tcp started serving");
         let connection_id = ID(rand::random());
 
         let tcp_ctx = Arc::new(TCPContext {
@@ -78,7 +79,7 @@ where
             meta: TransportContext {
                 connection: ConnectionInfo {
                     id: connection_id,
-                    local_addr: stream.local_addr()?.into(),
+                    local_addr: stream.stream.local_addr()?.into(),
                     peer_addr: Default::default(),
                     protocol: TransportProtocol::Tcp,
                 },
@@ -86,20 +87,22 @@ where
                 route: Default::default(),
             },
         });
-
+        debug!("{:?}", tcp_ctx);
         self.hooks
             .tcp_connection_init(&mut (*tcp_ctx).clone())
             .await?;
-
+        debug!("{:?} after tcp_connection_init", tcp_ctx);
         let upstream_addr: Option<SocketAddress> =
             tcp_ctx.meta.route.upstream_to_set.clone().into();
         let upstream_addr =
             upstream_addr.ok_or_else(|| anyhow!("plugin did not select an upstream"))?;
         let upstream: std::net::SocketAddr = upstream_addr.into();
-        let upstream = TcpStream::connect(upstream).await?;
+        let upstream = rama_tcp::client::default_tcp_connect(&stream.extensions, upstream.into())
+            .await?
+            .0;
 
-        let (mut down_r, mut down_w) = stream.into_split();
-        let (mut up_r, mut up_w) = upstream.into_split();
+        let (mut down_r, mut down_w) = stream.stream.into_split();
+        let (mut up_r, mut up_w) = upstream.stream.into_split();
 
         let hooks = self.hooks.clone();
 
@@ -177,19 +180,15 @@ impl<H> UdpProxyService<H> {
     }
 }
 
-impl<H, S> Service<S, UdpSocket> for UdpProxyService<H>
+impl<H> Service<UdpSocket> for UdpProxyService<H>
 where
     H: UdpProxyHooks + Send + Sync + 'static,
-    S: Clone + Send + Sync + 'static,
 {
-    type Response = ();
+    type Output = ();
     type Error = anyhow::Error;
 
-    async fn serve(
-        &self,
-        _ctx: Context<S>,
-        socket: UdpSocket,
-    ) -> Result<Self::Response, Self::Error> {
+    async fn serve(&self, socket: UdpSocket) -> Result<(), Self::Error> {
+        debug!("udp started serving");
         let mut buf = [0u8; 2048];
 
         let connection_id = ID(rand::random());
@@ -199,7 +198,7 @@ where
             meta: TransportContext {
                 connection: ConnectionInfo {
                     id: connection_id,
-                    local_addr: socket.local_addr()?.into(),
+                    local_addr: socket.local_addr().unwrap().into(),
                     peer_addr: Default::default(),
                     protocol: TransportProtocol::Udp,
                 },
@@ -221,7 +220,7 @@ where
             let mut data = buf[..len].to_vec();
 
             curr_ctx.meta.connection.peer_addr = Some(SocketAddress {
-                host: peer_addr.ip_addr().to_string().into(),
+                host: peer_addr.ip().to_string().into(),
                 port: peer_addr.port(),
             })
             .into();
@@ -250,13 +249,22 @@ where
 // Launchers
 // -----------------------------------------------------------------------------
 
-pub async fn run_tcp_server<H>(listen_addr: SocketAddr, hooks: H) -> Result<()>
+pub async fn run_tcp_server<H>(listen_addr: SocketAddr, hooks: H) -> Result<(), BoxError>
 where
     H: TcpProxyHooks + Send + Sync + 'static,
 {
+    debug!("entered `run_tcp_server`");
     let service = TcpProxyService::new(hooks);
-    let listener = TcpListener::bind(listen_addr).await.unwrap();
+    debug!(
+        "`run_tcp_server`: builed service, binding to {:?}",
+        listen_addr
+    );
+    let listener = TcpListener::bind_address(listen_addr)
+        .await
+        .expect("bind TCP listener");
+    debug!("`run_tcp_server`: binded to socket, starting serving");
     listener.serve(service).await;
+    debug!("`run_tcp_server`: serve completed");
     Ok(())
 }
 
@@ -264,10 +272,17 @@ pub async fn run_udp_server<H>(listen_addr: SocketAddr, hooks: H) -> Result<()>
 where
     H: UdpProxyHooks + Send + Sync + 'static,
 {
+    debug!("entered `run_udp_server`");
     let service = UdpProxyService::new(hooks);
+    debug!(
+        "`run_udp_server`: builed service, binding to {:?}",
+        listen_addr
+    );
     let socket = UdpSocket::bind(listen_addr).await.unwrap();
 
-    service.serve(Context::default(), socket).await?;
+    debug!("`run_udp_server`: binded to socket, starting serving");
+    service.serve(socket).await?;
 
+    debug!("`run_udp_server`: serve completed");
     Ok(())
 }

@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
-use log::{debug, info};
+use log::{debug, error, info};
 use pingora_core::ErrorType::HTTPStatus;
 use pingora_core::server::Server;
 use pingora_core::server::configuration::Opt;
@@ -380,7 +380,7 @@ impl Runtime {
 
     /// Start the Pingora server with the configured proxy service.
     pub async fn run(self) -> Result<()> {
-        info!("starting runtime on {}", self.config.http_listen_addr);
+        info!("starting http runtime on {}", self.config.http_listen_addr);
         debug!("{:?}", self);
         let mut server = Server::new(Some(Opt::default())).context("create pingora server")?;
         server.bootstrap();
@@ -396,9 +396,11 @@ impl Runtime {
         // ---------------------------------------------------------------------
         // TCP service (Rama)
         // ---------------------------------------------------------------------
+        let mut nursery = tokio::task::JoinSet::new();
         if let Ok(tcp_addr) = self.config.tcp_listen_addr.parse::<SocketAddr>() {
             let tcp_hooks = plugin_hooks.clone();
-            tokio::spawn(async move {
+            nursery.spawn(async move {
+                info!("starting tcp on {}", self.config.tcp_listen_addr);
                 if let Err(e) = run_tcp_server(tcp_addr, (*tcp_hooks).clone()).await {
                     log::error!("TCP server failed: {}", e);
                 }
@@ -415,7 +417,8 @@ impl Runtime {
         // ---------------------------------------------------------------------
         if let Ok(udp_addr) = self.config.udp_listen_addr.parse::<SocketAddr>() {
             let udp_hooks = plugin_hooks.clone();
-            tokio::spawn(async move {
+            nursery.spawn(async move {
+                info!("starting udp on {}", self.config.udp_listen_addr);
                 if let Err(e) = run_udp_server(udp_addr, (*udp_hooks).clone()).await {
                     log::error!("UDP server failed: {}", e);
                 }
@@ -434,6 +437,11 @@ impl Runtime {
         tokio::task::spawn_blocking(move || {
             server.run_forever();
         });
+        while let Some(res) = nursery.join_next().await {
+            if let Err(err) = res {
+                error!("l4 completed with error: {:?}", err);
+            }
+        }
         Ok(())
     }
 }

@@ -10,11 +10,11 @@ stabby = "72"
 anyhow = "1"
 tokio = { version = "1", features = ["full"] }
 bytes = "1"
-rama = "0.2"
-rama-core = "0.2"
-rama-net = "0.2"
-rama-tcp = "0.2"
-rama-udp = "0.2"
+rama = "0.3.0-alpha.4"
+rama-core = "0.3.0-alpha.4"
+rama-net = "0.3.0-alpha.4"
+rama-tcp = "0.3.0-alpha.4"
+rama-udp = "0.3.0-alpha.4"
 rand = "0.10"
 vakil-plugin-sys = { workspace = true }
-log = { workspace = true }
+log.workspace = true

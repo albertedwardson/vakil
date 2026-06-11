@@ -15,14 +15,6 @@ fn log_event(name: &str, detail: &str) {
     log::info!("[example-http-mw] {}: {}", name, detail);
 }
 
-fn module_ref(inst: *mut PluginInstanceOpaque) -> StdOption<&'static ModuleHandle> {
-    if inst.is_null() {
-        return None;
-    }
-
-    unsafe { (inst as *const ModuleHandle).as_ref() }
-}
-
 fn module_mut(inst: *mut PluginInstanceOpaque) -> StdOption<&'static mut ModuleHandle> {
     if inst.is_null() {
         return None;

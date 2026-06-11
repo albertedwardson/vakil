@@ -3,38 +3,29 @@
 scale 1920*1080
 
 actor Upstream
-participant "Proxy Core\n(HTTP / TCP / UDP + MWs)" as P
-participant "Routing Engine" as R
-participant "Configuration Manager" as C
+participant "Proxy Core" as P
 participant "Plugin Modules" as PM
 actor Downstream
 
 == Routing decision ==
 Upstream -> P : Incoming request / connection / packet
-P -> R : Pass flow to routing engine
-R -> PM : Consult plugins (`on_route`)
-PM --> R : plugin route decision
-R -> C : Lookup config for flow / packet
+P -> PM : Consult plugins (`on_route`)
+PM --> P : plugin route decision
 
-alt config found
-    C --> R : Matching config
-
+alt upstream selected
     == Forwarding ==
-    R -> Downstream : Forward via selected route
+    P -> Downstream : Forward via selected route
 
     alt downstream success
-        Downstream --> R : Response / packet / stream data
-        R -> P : Return downstream data
+        Downstream --> P : Response / packet / stream data
         P -> Upstream : Deliver upstream
     else downstream failure
-        Downstream ->x R : Timeout / reset / unreachable
-        R -> P : Signal transport error
+        Downstream ->x P : Timeout / reset / unreachable
         P -> Upstream : Propagate error / close
     end
 
-else no config found
-    C --> R : No match
-    R -> P : Signal routing failure
+else no upstream selected
+    C --> P : No match
     P -> Upstream : Reject / error
 end
 

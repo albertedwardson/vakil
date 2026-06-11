@@ -16,12 +16,12 @@ Vakil plugins are Rust dynamic libraries that are discovered and loaded only at 
 - *Replacement value* - a new owned value returned by a plugin when in-place mutation is not sufficient.
 - *Plugin-owned config* - configuration data interpreted by the plugin itself; the host does not define a shared config schema.
 
-## ABI summary
+## Summary
 
-Vakil plugins MUST be Rust dynamic libraries.
-Vakil MUST NOT use a C ABI as the public plugin contract.
-Vakil MUST load plugins only at startup.
-Vakil MUST NOT watch, pull, or hot-reload plugins or configuration at runtime.
+Vakil plugins are a Rust dynamic libraries.
+Vakil doesn't use a C ABI natively as the public plugin contract.
+Vakil loads plugins only at startup.
+Vakil doesn't watch, pull, or hot-reload plugins or configuration at runtime.
 Vakil plugins MAY route, filter, inspect, reject, and mutate HTTP, TCP, and UDP traffic.
 Vakil plugins MUST own their own configuration format and startup configuration parsing.
 
@@ -34,54 +34,16 @@ The host discovers plugin libraries during startup using environment variables.
 - If `VAKIL_PATH_SEP` is not set, the host MUST use `;` as the separator.
 
 Each entry in `VAKIL_PLUGIN_PATHS` MAY refer to a plugin library file or a directory containing one or more plugin libraries.
-The host MUST resolve the entries in order and load matching libraries before serving traffic.
-If a path cannot be loaded, the host MUST treat that as a startup error unless the deployment policy explicitly marks it optional.
-
-## ABI goals
-
-The Vakil ABI is designed to:
-
-- expose full control for routing decisions for HTTP, TCP, and UDP to the plugins,
-- support traffic filtering and mutation,
-- keep plugin-owned configuration outside the host config format,
-- remain Rust-native and versioned,
-- make ownership and threading rules explicit.
+The host resolves the entries in order and load matching libraries before serving traffic.
+If a path cannot be loaded, the host treats that as a startup error.
 
 ## Public types
 
 The exact implementation may evolve, but the ABI is defined in terms of the following stable concepts.
 
-```rust
-pub struct PluginManifest {
-    pub name: stabby::string::String,
-    pub version: SemVer,
-}
+See current implementation [here](../crates/vakil-plugin-api).
 
-pub struct PluginInitContext {
-    pub library_path: stabby::string::String,
-    pub plugin_dir: stabby::option::Option<stabby::string::String>,
-    pub host_version: SemVer,
-    pub env: EnvSnapshot,
-}
-
-pub struct RouteContext {
-    ...
-}
-
-pub struct HttpContext {
-    ...
-}
-
-pub struct TcpContext {
-    ...
-}
-
-pub struct UdpContext {
-    ...
-}
-```
-
-Vakil SHOULD use stabby's stable string, vector, option, and result types at the ABI boundary.
+Vakil uses stabby's types at the ABI boundary.
 The host and the plugin MUST agree on ownership for every value that crosses the ABI boundary.
 
 The current implementation passes context values across callback boundaries as raw pointers to keep the exported function signatures ABI-stable while the data structures themselves remain `stabby`-checked.
@@ -107,56 +69,10 @@ A Vakil plugin library MUST export a root module that the host can load with `st
 The root module MUST provide the plugin manifest and factory methods for the protocol-specific plugin traits that the library supports.
 Protocol factories that are not supported MAY be exported as `None` in the root module, so plugin authors do not need to provide no-op callbacks for unsupported protocols.
 
-A conceptual Rust interface looks like this:
+Current implementation of the interface located [here](../crates/vakil-plugin-sys/src/lib.rs).
 
-```rust
-pub trait VakilPluginRoot {
-    fn manifest(&self) -> PluginManifest;
-    fn create_http(&self) -> Option<Box<dyn VakilHttpPlugin>>;
-    fn create_tcp(&self) -> Option<Box<dyn VakilTcpPlugin>>;
-    fn create_udp(&self) -> Option<Box<dyn VakilUdpPlugin>>;
-}
-
-pub trait VakilHttpPlugin {
-    fn init(&mut self, ctx: &PluginInitContext) -> Result<(), PluginError>;
-    fn on_route(&mut self, ctx: &mut RouteContext) -> Result<RouteDecision, PluginError>;
-    fn on_request_headers(&mut self, ctx: &mut HttpContext) -> Result<HookOutcome, PluginError>;
-    fn on_request_body(&mut self, ctx: &mut HttpContext) -> Result<HookOutcome, PluginError>;
-    fn on_response_headers(&mut self, ctx: &mut HttpContext) -> Result<HookOutcome, PluginError>;
-    fn on_response_body(&mut self, ctx: &mut HttpContext) -> Result<HookOutcome, PluginError>;
-    fn on_trailers(&mut self, ctx: &mut HttpContext) -> Result<HookOutcome, PluginError>;
-    fn on_local_reply(&mut self, ctx: &mut HttpContext) -> Result<HookOutcome, PluginError>;
-    fn shutdown(&mut self);
-}
-
-pub trait VakilTcpPlugin {
-    fn init(&mut self, ctx: &PluginInitContext) -> Result<(), PluginError>;
-    fn on_route(&mut self, ctx: &mut RouteContext) -> Result<RouteDecision, PluginError>;
-    fn on_connect(&mut self, ctx: &mut TcpContext) -> Result<HookOutcome, PluginError>;
-    fn on_data(&mut self, ctx: &mut TcpContext) -> Result<HookOutcome, PluginError>;
-    fn on_half_close(&mut self, ctx: &mut TcpContext) -> Result<HookOutcome, PluginError>;
-    fn on_close(&mut self, ctx: &mut TcpContext) -> Result<HookOutcome, PluginError>;
-    fn shutdown(&mut self);
-}
-
-pub trait VakilUdpPlugin {
-    fn init(&mut self, ctx: &PluginInitContext) -> Result<(), PluginError>;
-    fn on_route(&mut self, ctx: &mut RouteContext) -> Result<RouteDecision, PluginError>;
-    fn on_datagram(&mut self, ctx: &mut UdpContext) -> Result<HookOutcome, PluginError>;
-    fn on_session_start(&mut self, ctx: &mut UdpContext) -> Result<HookOutcome, PluginError>;
-    fn on_session_end(&mut self, ctx: &mut UdpContext) -> Result<HookOutcome, PluginError>;
-    fn shutdown(&mut self);
-}
-```
-
-If a plugin supports multiple protocols, the host MAY instantiate more than one protocol trait from the same library.
+If a plugin supports multiple protocols, the host will instantiate more than one protocol trait from the same library.
 If the plugin is shared, the host MAY call hooks from multiple threads and the plugin MUST synchronize its own mutable state.
-
-## Host functions exposed to plugins
-
-The host MUST expose as many functions required for a plugin to be as custumasible as possible.
-The host MUST NOT provide runtime configuration watch or reload functions.
-The host MUST NOT provide a generic config API that bypasses the plugin-owned configuration model.
 
 ## Manifest
 
@@ -166,11 +82,10 @@ The manifest SHOULD include:
 
 - a stable plugin name,
 - a semantic version or ABI version,
-- a threading model,
 - optional build metadata.
 
-The host uses the manifest to decide whether the plugin is compatible with the current process, runtime, and policy.
-If the manifest is incompatible, the host MUST reject the plugin during startup.
+The host uses the manifest to decide whether the plugin is compatible with the current runtime.
+If the manifest is incompatible, the host rejects the plugin during startup.
 
 ## Routing hooks
 
@@ -182,7 +97,6 @@ A route decision MAY:
 - keep the selected upstream,
 - replace the selected upstream,
 - change retry or timeout policy,
-- block the flow,
 - synthesize a response or error,
 - annotate the flow for later hooks.
 
@@ -191,13 +105,8 @@ A routing hook MAY inspect listener metadata, peer metadata, SNI, headers, datag
 
 ### Upstream selection policy
 
-Vakil delegates upstream selection authority to plugins: a plugin MAY choose,
-rewrite, or replace the upstream for a flow. The host does not impose runtime
-policy that prevents a plugin from selecting an upstream. Deployments that
-require stricter control SHOULD use external deployment policies (firewalls,
-network namespaces, or sidecar guards) or configure the host to restrict
-allowed upstreams at startup. The ABI and host do not validate or block
-plugin-chosen upstreams beyond basic syntactic checks.
+Vakil delegates upstream selection authority to plugins: a plugin MUST choose, rewrite, or replace the upstream for a flow.
+Vakil doesn't validate or block plugin-chosen upstreams beyond basic syntactic checks.
 
 ## HTTP hooks
 
@@ -214,7 +123,7 @@ A plugin MAY implement one or more of the following phases:
 
 HTTP hooks MAY inspect and mutate headers and bodies.
 Body hooks MUST be invoked once per body chunk so large request and response payloads can be processed incrementally.
-When a body hook is invoked for a chunk, `HttpMessage.body` MUST contain that chunk rather than a fully buffered message body.
+When a body hook is invoked for a chunk, `HttpRequest/HttpResponse.body` MUST contain that chunk rather than a fully buffered message body.
 HTTP hooks MAY short-circuit the request with a local response or reject the request.
 HTTP hooks MUST preserve ownership rules when replacing a buffer or message.
 
@@ -267,71 +176,13 @@ Each plugin defines its own configuration model.
 A plugin MAY read files, directories, environment variables, or other startup-only resources that it owns.
 The host only provides discovery metadata and the startup context needed to locate those resources.
 
-This means the host does not parse plugin config and does not impose JSON, TOML, or YAML.
-
-## Threading model
-
-The manifest MUST declare the threading model.
-The following threading models are expected:
-
-- shared, internally synchronized,
-- single-threaded,
-- worker-local.
-
-The host MAY execute hooks concurrently only when the manifest says that is safe.
-A plugin that is not thread-safe MUST NOT be invoked concurrently by the host.
-
 ## Errors
 
-Hook results SHOULD use a stable Rust error type or a compact status enum with an optional detail string.
-A plugin error MAY indicate:
-
-- invalid input,
-- unsupported protocol or phase,
-- temporary failure,
-- permanent failure,
-- policy rejection,
-- internal plugin error.
-
+Hook results MUST use provided error type with an optional detail string.
 The host MUST be able to distinguish success from rejection and from transport failure.
 
-## Failure semantics
+Vakil treats plugin execution failures as host-level policy: if any plugin in a protocol chain returns an error for a given flow, the host will treat the entire plugin chain for that flow as failed.
 
-Vakil treats plugin execution failures as host-level policy: if any plugin in a
-protocol chain returns an error for a given flow, the host MUST treat the
-entire plugin chain for that flow as failed. The host SHOULD then apply the
-failure policy documented elsewhere (for example, abort the flow, generate a
-local-reply, or fall back to a safe upstream) as configured by deployment
-policy. Hosts MUST NOT silently ignore plugin errors and continue as if the
-plugin had not run.
+Vakil does not attempt to recover from plugin panics. If a plugin panics while executing a hook, the panic is permitted to propagate according to the host process behaviour (which may abort).
 
-Panics: Vakil does not attempt to recover from plugin panics. If a plugin
-panics while executing a hook, the panic is permitted to propagate according
-to the host process behaviour (which may abort). Plugin authors MUST avoid
-panics in production code; the host MAY run plugins in isolated processes or
-use OS-level supervision in deployments that require process-level isolation.
-
-Host action on plugin-chain failure: When the host considers a plugin chain
-to have failed for a flow (for example, due to a plugin returning an error),
-the host SHOULD synthesize a local reply for the downstream peer. If any
-plugin has populated the `HttpContext.response` during a request-phase hook,
-the host MUST use that `HttpMessage` (status, headers, body, trailers) as the local
-reply. If no plugin-supplied response is available, the host SHOULD fall back
-to a compile-time constant default local-reply (for example, `DEFAULT_LOCAL_REPLY_STATUS = 502`).
-Plugins may override this by populating `HttpContext.response`. This
-ensures plugins can fully control local-replies while the host provides a
-predictable fallback when necessary.
-
-
-## Versioning and compatibility
-
-The ABI MUST be versioned.
-The host MUST reject plugins with incompatible ABI versions at load time.
-Adding new hooks SHOULD be additive.
-Changing ownership rules for existing fields MUST be treated as a breaking change.
-Changing the meaning of a capability bit MUST be treated as a breaking change.
-
-## Relationship to the current crates
-
-The workspace currently contains a loader in [crates/plugin-host](../crates/plugin-host/src/lib.rs) that validates plugin manifests, captures startup metadata, and instantiates HTTP/TCP/UDP protocol modules.
-The ABI-facing crates in [crates/plugin-api](../crates/plugin-api/src/lib.rs) and [crates/plugin-sys](../crates/plugin-sys/src/lib.rs) now model the richer context data described above and should continue to evolve with the document.
+When the host considers a plugin chain to have failed for a flow (for example, due to a plugin returning an error), the host MAY synthesize a local reply for the downstream peer. If any plugin has populated the `HttpContext.response` during a request-phase hook, the host will use that `HttpMessage` (status, headers, body, trailers) as the local reply. If no plugin-supplied response is available, the host will fall back to a default local-reply.

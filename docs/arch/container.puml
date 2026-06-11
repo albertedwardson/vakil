@@ -2,7 +2,7 @@
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 HIDE_STEREOTYPE()
 
-title C4 Container Diagram — Reverse Proxy Architecture
+title Container level
 
 Person(upstream, "Upstream")
 Person(controlOperator, "Control Operator", "Engineer managing proxy configuration")
@@ -11,20 +11,14 @@ System_Boundary(proxy, "Programmable Reverse Proxy") {
 
     package "Vakil (core)" {
         Container(core, "Proxy Core", "rust[pingora]", "Core runtime, routing, plugin management")
-
-        Container(l7, "HTTP Proxy Engine", "rust[pingora/hyper]", "HTTP/1.0–3 reverse proxy and lifecycle hooks")
-
-        Container(l7mw, "HTTP Middleware Pipeline (core view)", "rust[hyper]", "Hook points for middleware provided by plugins")
-
-        Container(l4, "L4 Proxy Engine", "rust[pingora/hyper]", "TCP/UDP proxying and stream management")
-
-        Container(l4filter, "L4 Filter Pipeline (core view)", "rust[pingora]", "Hook points for L4 filters provided by plugins")
-
-        Container(config, "Imperative Configuration Runtime", "rust[stable-ABI]", "Programmatic configuration and routing logic")
+        Container(l7, "HTTP Proxy Engine", "rust[pingora]", "HTTP/1.0–2 reverse proxy and lifecycle hooks")
+        Container(l7mw, "HTTP Middleware Pipeline", "rust", "Hook points for middleware provided by plugins")
+        Container(l4, "L4 Proxy Engine", "rust[rama]", "TCP/UDP proxying and stream management")
+        Container(l4filter, "L4 Filter Pipeline", "rust[rama]", "Hook points for L4 filters provided by plugins")
     }
 
     package "Plugins (external modules)" {
-        Container(plugin, "Plugin Manager", "rust[stable-ABI]", "Loading and managing middleware and filters")
+        Container(plugin, "Plugin Host", "rust[stabby]", "Loading and managing middleware and filters")
         Container(plugin_modules, "Plugin Modules", "dynamic libs", "Middleware, routing hooks, L4 filters")
     }
 }
@@ -48,8 +42,8 @@ Rel_D(plugin, l7mw, "Provides middleware")
 Rel_D(plugin, l4filter, "Provides filters")
 
 ' ===== Configuration =====
-Rel_D(controlOperator, config, "Defines behavior")
-Rel_D(config, core, "Configures")
+Rel_D(controlOperator, plugin, "Defines behavior")
+Rel_D(plugin, core, "Configures")
 
 ' ===== Egress =====
 Rel_D(core, downstream, "Forwards traffic")
