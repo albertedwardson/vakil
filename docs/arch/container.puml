@@ -7,18 +7,18 @@ title Container level
 Person(upstream, "Upstream")
 Person(controlOperator, "Control Operator", "Engineer managing proxy configuration")
 
-System_Boundary(proxy, "Programmable Reverse Proxy") {
+System_Boundary(proxy, "Vakil") {
 
     package "Vakil (core)" {
-        Container(core, "Proxy Core", "rust[pingora]", "Core runtime, routing, plugin management")
+        Container(core, "Proxy Core", "rust[pingora/rama/stabby]", "Core runtime, routing, plugin management")
         Container(l7, "HTTP Proxy Engine", "rust[pingora]", "HTTP/1.0–2 reverse proxy and lifecycle hooks")
-        Container(l7mw, "HTTP Middleware Pipeline", "rust", "Hook points for middleware provided by plugins")
+        Container(l7mw, "HTTP Middleware Pipeline", "rust[pingora]", "Hook points for middleware provided by plugins")
         Container(l4, "L4 Proxy Engine", "rust[rama]", "TCP/UDP proxying and stream management")
         Container(l4filter, "L4 Filter Pipeline", "rust[rama]", "Hook points for L4 filters provided by plugins")
+        Container(plugin_host, "Plugin Host", "rust[stabby]", "Loading and managing middleware and filters")
     }
 
     package "Plugins (external modules)" {
-        Container(plugin, "Plugin Host", "rust[stabby]", "Loading and managing middleware and filters")
         Container(plugin_modules, "Plugin Modules", "dynamic libs", "Middleware, routing hooks, L4 filters")
     }
 }
@@ -37,13 +37,14 @@ Rel_D(l4, l4filter, "Applies")
 Rel_L(l4filter, core, "Controls flow")
 
 ' ===== Plugins =====
-Rel_U(core, plugin, "Uses")
-Rel_D(plugin, l7mw, "Provides middleware")
-Rel_D(plugin, l4filter, "Provides filters")
+Rel_U(core, plugin_host, "Uses")
+Rel_D(plugin_host, l7mw, "Provides middleware")
+Rel_D(plugin_host, l4filter, "Provides filters")
 
 ' ===== Configuration =====
-Rel_D(controlOperator, plugin, "Defines behavior")
-Rel_D(plugin, core, "Configures")
+Rel_D(controlOperator, plugin_modules, "Defines behavior")
+Rel_D(plugin_host, plugin_modules, "Loads")
+Rel_D(plugin_host, core, "Configures")
 
 ' ===== Egress =====
 Rel_D(core, downstream, "Forwards traffic")

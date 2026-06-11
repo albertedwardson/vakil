@@ -1,3 +1,4 @@
+#![allow(dead_code)] // TODO!
 use pingora_http::RequestHeader;
 use stabby::option::Option as AbiOption;
 use stabby::string::String as AbiString;
@@ -110,6 +111,7 @@ fn keep_route_decision() -> RouteDecision {
     RouteDecision {
         upstream_to_set: AbiOption::None(),
         action: RouteAction::Keep,
+        http_path: Default::default(),
     }
 }
 

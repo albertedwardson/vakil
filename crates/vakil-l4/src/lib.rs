@@ -1,3 +1,6 @@
+//! Rama proxy wiring for injectable hook callbacks.
+//! Actual logic implemented in hooks at ['vakil_runtime::l4']
+
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use log::{debug, error};
@@ -7,7 +10,7 @@ use rama_tcp::{TcpStream, server::TcpListener};
 use rama_udp::UdpSocket;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use vakil_plugin_sys::{
     ConnectionInfo, FlowDirection, ID, SocketAddress, TCPContext, TransportContext,
     TransportProtocol, UDPContext,
@@ -101,60 +104,25 @@ where
             .await?
             .0;
 
-        let (mut down_r, mut down_w) = stream.stream.into_split();
-        let (mut up_r, mut up_w) = upstream.stream.into_split();
+        let (down_r, down_w) = stream.stream.into_split();
+        let (up_r, up_w) = upstream.stream.into_split();
 
-        let hooks = self.hooks.clone();
+        let upstream_to_downstream = tcp_transfer(
+            up_r,
+            down_w,
+            (*tcp_ctx).clone(),
+            self.hooks.clone(),
+            FlowDirection::Outbound,
+        );
 
-        let mut curr_ctx = (*tcp_ctx).clone();
-        tokio::spawn(async move {
-            let mut buf = [0u8; 8192];
-
-            loop {
-                match up_r.read(&mut buf).await {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        let mut data = buf[..n].to_vec();
-                        curr_ctx.chunk = Some((&mut data).into()).into();
-                        curr_ctx.meta.direction = Some(FlowDirection::Outbound).into();
-                        let hook_outcome = hooks.tcp_data_received(&mut curr_ctx).await;
-                        if let Err(err) = hook_outcome {
-                            error!("{} plugin returned error", err);
-                            break;
-                        }
-                        if down_w.write_all(&buf[..n]).await.is_err() {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-
-            let _ = hooks.tcp_connection_close(&mut curr_ctx).await;
-        });
-
-        let mut buffer = vec![0u8; 8192];
-
-        let mut curr_ctx = (*tcp_ctx).clone();
-        loop {
-            let n = match down_r.read(&mut buffer).await {
-                Ok(0) => break,
-                Ok(n) => n,
-                Err(_) => break,
-            };
-
-            let mut data = buffer[..n].to_vec();
-
-            curr_ctx.chunk = Some((&mut data).into()).into();
-            curr_ctx.meta.direction = Some(FlowDirection::Inbound).into();
-
-            self.hooks.tcp_data_received(&mut curr_ctx).await?;
-            if let Some(data_to_write) = curr_ctx.chunk.as_ref()
-                && up_w.write_all(data_to_write.0.as_slice()).await.is_err()
-            {
-                break;
-            }
-        }
+        let downstream_to_upstream = tcp_transfer(
+            down_r,
+            up_w,
+            (*tcp_ctx).clone(),
+            self.hooks.clone(),
+            FlowDirection::Inbound,
+        );
+        tokio::try_join!(upstream_to_downstream, downstream_to_upstream,)?;
 
         self.hooks
             .tcp_connection_close(&mut (*tcp_ctx).clone())
@@ -189,7 +157,7 @@ where
 
     async fn serve(&self, socket: UdpSocket) -> Result<(), Self::Error> {
         debug!("udp started serving");
-        let mut buf = [0u8; 2048];
+        let mut buf = [0u8; 4096];
 
         let connection_id = ID(rand::random());
         // connection start
@@ -285,4 +253,49 @@ where
 
     debug!("`run_udp_server`: serve completed");
     Ok(())
+}
+
+async fn tcp_transfer<R, W, H>(
+    mut r: R,
+    mut w: W,
+    mut ctx: TCPContext,
+    hook: Arc<H>,
+    direction: FlowDirection,
+) -> anyhow::Result<()>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+    H: TcpProxyHooks + Sync,
+{
+    let mut buf = [0u8; 8192];
+
+    loop {
+        match r.read(&mut buf).await {
+            Ok(0) => {
+                debug!("EOF received");
+                break Ok(());
+            }
+            Ok(n) => {
+                let mut data = buf[..n].to_vec();
+
+                ctx.chunk = Some((&mut data).into()).into();
+                ctx.meta.direction = Some(direction).into();
+
+                let hook_outcome = hook.tcp_data_received(&mut ctx).await;
+                if let Err(err) = &hook_outcome {
+                    error!("{} plugin returned error", err);
+                }
+                hook_outcome?;
+
+                if let Some(data_to_write) = ctx.chunk.as_ref() {
+                    w.write_all(data_to_write.0.as_slice()).await?;
+                }
+            }
+
+            Err(e) => {
+                error!("{:?}", e);
+                break Err(e.into());
+            }
+        }
+    }
 }

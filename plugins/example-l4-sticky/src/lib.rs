@@ -1,3 +1,4 @@
+#![allow(dead_code)] // TODO!
 use std::hash::BuildHasherDefault;
 use xxhash_rust::xxh3::Xxh3;
 type XxBuildHasher = BuildHasherDefault<xxhash_rust::xxh3::Xxh3>;
@@ -212,6 +213,7 @@ fn keep_route() -> RouteDecision {
     RouteDecision {
         upstream_to_set: AbiOption::None(),
         action: RouteAction::Keep,
+        ..Default::default()
     }
 }
 
@@ -224,6 +226,7 @@ fn route_to(backend: String) -> RouteDecision {
     RouteDecision {
         upstream_to_set: AbiOption::Some(upstream),
         action: RouteAction::ReplaceUpstream,
+        ..Default::default()
     }
 }
 
@@ -232,6 +235,7 @@ fn reject_route(_status: u16, _message: &str) -> RouteDecision {
     RouteDecision {
         upstream_to_set: AbiOption::None(),
         action: RouteAction::Reject,
+        ..Default::default()
     }
 }
 

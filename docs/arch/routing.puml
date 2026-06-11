@@ -25,7 +25,7 @@ alt upstream selected
     end
 
 else no upstream selected
-    C --> P : No match
+    PM --> P : No match
     P -> Upstream : Reject / error
 end
 

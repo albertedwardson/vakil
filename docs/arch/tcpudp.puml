@@ -4,7 +4,6 @@ scale 1920*1080
 
 actor Upstream
 participant "L4 Proxy Module" as P
-participant "Packet Middleware Chain" as MW
 participant "Proxy core" as R
 participant "Plugin Modules" as PM
 actor Downstream
@@ -12,32 +11,33 @@ actor Downstream
 loop continuous data flow
 
 Upstream -> P : Send packet
-P -> MW : Forward raw packet / stream chunk
+P -> R : Forward raw packet / stream chunk
+R -> PM : Call hooks with current packet data
 
 loop while MWs
-    MW -> MW : Process / transform / inspect packet
+    PM -> PM : Process / transform / inspect packet
 end
 
 alt middleware decides to forward
-    MW -> R : Forward packet (possibly modified)
-    R -> PM : Consult TCP plugin modules (connection filter / on_route)
+    PM -> R : Forward packet (possibly modified)
+    R ->  : Consult TCP plugin modules (connection filter / on_route)
     PM --> R : decision
 else middleware handles locally
-    MW -> P : Generate packet / drop / terminate
+    PM -> P : Generate packet / drop / terminate
 end
 
 R -> Downstream : Send packet
 Downstream -> R : Raw packet / stream chunk
-R -> MW : Forward packet / error signal if needed
+R -> PM : Forward packet / error signal if needed
 
 loop while MWs
-    MW -> MW : Process / transform / inspect packet
+    PM -> PM : Process / transform / inspect packet
 end
 
 alt middleware forwards upstream
-    MW -> P : Forward packet (modified or not)
+    PM -> P : Forward packet (modified or not)
 else middleware handles locally
-    MW -> P : Generate packet / drop / terminate
+    PM -> P : Generate packet / drop / terminate
 end
 
 P -> Upstream : Send packet
@@ -46,11 +46,11 @@ end
 == Error Handling ==
 alt downstream failure
     Downstream ->x R : Connection reset / timeout
-    R -> MW : Signal transport error
+    R -> PM : Signal transport error
     loop while MWs
-        MW -> MW : Handle error
+        PM -> PM : Handle error
     end
-    MW -> P : Handle error (retry / close / synthesize data)
+    PM -> P : Handle error (retry / close / synthesize data)
     P -> Upstream : Propagate error / close connection
 end
 

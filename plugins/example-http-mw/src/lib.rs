@@ -1,12 +1,31 @@
+//! HTTP-only example plugin demonstrating routing, request interception, and
+//! local responses.
+//!
+//! Behavior:
+//! - Rotates upstream per request using a global counter:
+//! - Even requests → httpbin.dev/dump/request?n={n}
+//! - Odd requests → httpbin.org/anything?n={n}
+//! - Query parameter n increments globally per request.
+//! - Special case: GET /local-reply returns a static response without upstream
+//!   forwarding.
+//!
+//! Hook coverage:
+//! - on_route: selects upstream dynamically
+//! - on_request_headers: inspects request and may short-circuit response
+//! - on_request_body: logs request payload size
+//! - on_response_headers/body: logs upstream response metadata
+//! - on_trailers: logs trailer phase
+//! - on_local_reply: logs locally generated responses
+
 use stabby::option::Option as AbiOption;
 use stabby::result::Result;
 use stabby::string::String;
 use stabby::vec::Vec;
-use std::option::Option as StdOption;
+use std::sync::atomic::{AtomicU64, Ordering};
 use vakil_plugin_api::{PluginHttpModule, PluginInstanceOpaque, PluginRootModule};
 use vakil_plugin_sys::{
-    Bytes, HookAction, HookOutcome, HttpContext, HttpResponse, HttpStatus, ID, PluginError,
-    PluginInitContext, PluginManifest, SemVer,
+    Bytes, HookAction, HookOutcome, HttpContext, HttpResponse, HttpStatus, PluginError,
+    PluginInitContext, PluginManifest, RouteAction, RouteDecision, SemVer, SocketAddress,
 };
 
 struct ModuleHandle {}
@@ -15,25 +34,13 @@ fn log_event(name: &str, detail: &str) {
     log::info!("[example-http-mw] {}: {}", name, detail);
 }
 
-fn module_mut(inst: *mut PluginInstanceOpaque) -> StdOption<&'static mut ModuleHandle> {
-    if inst.is_null() {
-        return None;
-    }
-
-    unsafe { (inst as *mut ModuleHandle).as_mut() }
-}
-
 extern "C" fn http_init(
-    inst: *mut PluginInstanceOpaque,
+    _inst: *mut PluginInstanceOpaque,
     ctx: *const PluginInitContext,
 ) -> Result<(), PluginError> {
     if let Some(ctx) = unsafe { ctx.as_ref() } {
-        if let Some(module) = module_mut(inst) {
-            module;
-        }
-
         log_event(
-            "init",
+            "inited",
             &format!(
                 "library={} host={}.{}.{} env_entries={}",
                 ctx.library_path.as_str(),
@@ -48,14 +55,40 @@ extern "C" fn http_init(
     Result::Ok(())
 }
 
+static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 extern "C" fn http_on_route(
     _inst: *mut PluginInstanceOpaque,
     ctx: *mut HttpContext,
 ) -> Result<HookOutcome, PluginError> {
-    let outcome = HookOutcome::default();
-    let _http_ctx = unsafe { ctx.as_ref() }.unwrap();
-    // TODO: implement changing routes
-    Result::Ok(outcome)
+    let ctx = unsafe { ctx.as_mut() }.unwrap();
+
+    let n = REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let (host, path) = if n.is_multiple_of(2) {
+        ("httpbin.dev", format!("/dump/request?n={n}"))
+    } else {
+        ("httpbin.org", format!("/anything?n={n}"))
+    };
+
+    ctx.route = Some(RouteDecision {
+        action: RouteAction::ReplaceUpstream,
+        upstream_to_set: Some(SocketAddress {
+            host: host.into(),
+            port: 443,
+        })
+        .into(),
+        http_path: Some(path.into()).into(),
+    })
+    .into();
+
+    log_event(
+        "route",
+        &format!("upstream=https://httpbin.dev/dump/request?n={n}"),
+    );
+
+    Result::Ok(HookOutcome {
+        action: HookAction::Replace,
+    })
 }
 
 extern "C" fn http_on_request_headers(
@@ -78,8 +111,8 @@ extern "C" fn http_on_request_headers(
 
         if request.method.as_str() == "GET" && request.path.as_str() == "/local-reply" {
             ctx.response = Some(HttpResponse {
-                stream_id: ID(request.stream_id.0),
-                version: vakil_plugin_sys::HttpVersion::Http11,
+                stream_id: request.stream_id,
+                version: request.version,
                 status: HttpStatus(200),
                 headers: Default::default(),
                 body: Bytes(Vec::from("hello from example-http-mw".as_bytes())),
@@ -120,16 +153,14 @@ extern "C" fn http_on_response_headers(
     ctx: *mut HttpContext,
 ) -> Result<HookOutcome, PluginError> {
     if let Some(ctx) = unsafe { ctx.as_mut() }
-        && let Some(request) = ctx.request.as_mut()
+        && let Some(response) = ctx.response.as_mut()
     {
-        let status = ctx
-            .response
-            .as_ref()
-            .map(|response| response.status.0)
-            .unwrap_or(0);
         log_event(
             "response",
-            &format!("path={} status={}", request.path.as_str(), status),
+            &format!(
+                "status={:?} headers={:?}",
+                response.status, response.headers
+            ),
         );
     }
 
@@ -142,15 +173,15 @@ extern "C" fn http_on_response_body(
 ) -> Result<HookOutcome, PluginError> {
     if let Some(ctx) = unsafe { ctx.as_mut() }
         && let Some(request) = ctx.request.as_mut()
+        && let Some(response) = ctx.response.as_mut()
     {
-        let body_len = ctx
-            .response
-            .as_ref()
-            .map(|response| response.body.0.len())
-            .unwrap_or(0);
         log_event(
             "response-body",
-            &format!("path={} body={}", request.path.as_str(), body_len),
+            &format!(
+                "path={} body={}",
+                request.path.as_str(),
+                response.body.len()
+            ),
         );
     }
 

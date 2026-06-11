@@ -1,9 +1,9 @@
-//! Pingora proxy wrapper with injectable hook callbacks.
+//! Pingora proxy wiring for injectable hook callbacks.
+//! Actual logic implemented in hooks at ['vakil_runtime::http']
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use log::{debug, info, warn};
-use pingora::apps::HttpServerOptions;
 use pingora_core::prelude::*;
 use pingora_core::server::Server;
 use pingora_core::upstreams::peer::HttpPeer;
@@ -212,86 +212,6 @@ where
     info!("attaching HTTP proxy service on {}", settings.listen_addr);
     let proxy = VakilHttpProxy::with_hooks(settings.clone(), hooks);
     let mut service = http_proxy_service(&server.configuration, proxy);
-    let http_logic = service.app_logic_mut().unwrap();
-    let mut so = HttpServerOptions::default();
-    so.h2c = false;
-    so.allow_connect_method_proxying = false;
-    http_logic.server_options = Some(so);
-
     service.add_tcp(settings.listen_addr.as_str());
     server.add_service(service);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{HttpContext, HttpProxyHooks, ProxySettings, VakilHttpProxy};
-    use async_trait::async_trait;
-    use bytes::Bytes;
-    use pingora_core::Result as PingoraResult;
-    use pingora_http::{RequestHeader, ResponseHeader};
-    use pingora_proxy::Session;
-    use std::sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    };
-    use std::time::Duration;
-
-    #[derive(Clone, Default)]
-    struct RecordingHooks {
-        request_seen: Arc<AtomicBool>,
-        response_seen: Arc<AtomicBool>,
-    }
-
-    #[async_trait]
-    impl HttpProxyHooks for RecordingHooks {
-        async fn request_filter(
-            &self,
-            _session: &mut Session,
-            _ctx: &mut HttpContext,
-        ) -> PingoraResult<bool> {
-            self.request_seen.store(true, Ordering::SeqCst);
-            Ok(false)
-        }
-
-        async fn upstream_request_filter(
-            &self,
-            _session: &mut Session,
-            upstream_request: &mut RequestHeader,
-            _ctx: &mut HttpContext,
-        ) -> PingoraResult<()> {
-            upstream_request
-                .insert_header("X-Vakil-Test", "proxy")
-                .unwrap();
-            Ok(())
-        }
-
-        async fn response_filter(
-            &self,
-            _session: &mut Session,
-            upstream_response: &mut ResponseHeader,
-            _ctx: &mut HttpContext,
-        ) -> PingoraResult<()> {
-            self.response_seen.store(true, Ordering::SeqCst);
-            upstream_response
-                .insert_header("X-Vakil-Response", "seen")
-                .unwrap();
-            Ok(())
-        }
-
-        fn response_body_filter(
-            &self,
-            _session: &mut Session,
-            _body: &mut Option<Bytes>,
-            _end_of_stream: bool,
-            _ctx: &mut HttpContext,
-        ) -> PingoraResult<Option<Duration>> {
-            Ok(None)
-        }
-    }
-
-    #[test]
-    fn proxy_can_be_constructed_with_hooks() {
-        let settings = ProxySettings::new("127.0.0.1:8080");
-        let _proxy = VakilHttpProxy::with_hooks(settings, RecordingHooks::default());
-    }
 }

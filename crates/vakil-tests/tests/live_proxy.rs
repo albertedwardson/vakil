@@ -1,3 +1,4 @@
+#![allow(dead_code)] // TODO!
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};

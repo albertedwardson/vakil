@@ -375,10 +375,12 @@ pub enum RouteAction {
 #[stabby::stabby]
 #[derive(Clone, Default, Debug)]
 pub struct RouteDecision {
-    /// Optional replacement upstream.
-    pub upstream_to_set: Option<SocketAddress>,
     /// Selected action.
     pub action: RouteAction,
+    /// Optional replacement upstream.
+    pub upstream_to_set: Option<SocketAddress>,
+    /// Http path, ignored in TCP and UDP contexts
+    pub http_path: Option<String>,
 }
 
 /// HTTP request/response view passed to HTTP plugin callbacks.

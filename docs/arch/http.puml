@@ -31,23 +31,23 @@ end
 
 == Response path ==
 Downstream -> R : HTTP Response
-R -> MW : Pass response back through middlewares
+R -> PM : Pass response back through middlewares
 
 loop while MWs
-    MW -> MW : Inspect / modify / short-circuit response
+    PM -> PM : Inspect / modify / short-circuit response
 end
 
-MW -> P : Return final response
+PM -> P : Return final response
 P -> Upstream : HTTP Response
 
 == Error handling ==
 alt downstream error
     Downstream ->x R : Connection failure / timeout
-    R -> MW : Signal upstream-facing error
+    R -> PM : Signal upstream-facing error
     loop while MWs
-        MW -> MW : Handle/ignore error
+        PM -> PM : Handle/ignore error
     end
-    MW -> P : Transform or pass error
+    PM -> P : Transform or pass error
     P -> Upstream : HTTP response or forward downstream failure
 end
 

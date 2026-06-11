@@ -447,6 +447,7 @@ mod tests {
         let decision = RouteDecision {
             upstream_to_set: Option::None(),
             action: RouteAction::Keep,
+            ..Default::default()
         };
         assert_eq!(decision.action as u8, RouteAction::Keep as u8);
         let hook = HookOutcome {
