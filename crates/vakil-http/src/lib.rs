@@ -15,6 +15,14 @@ use vakil_plugin_sys::HttpContext;
 
 #[async_trait]
 pub trait HttpProxyHooks: Send + Sync {
+    async fn early_request_filter(
+        &self,
+        _session: &mut Session,
+        _ctx: &mut HttpContext,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     async fn upstream_peer(
         &self,
         _session: &mut Session,
@@ -135,6 +143,10 @@ where
 
     fn new_ctx(&self) -> Self::CTX {
         HttpContext::default()
+    }
+
+    async fn early_request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<()> {
+        self.hooks.early_request_filter(session, ctx).await
     }
 
     async fn upstream_peer(

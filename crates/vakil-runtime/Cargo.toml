@@ -21,6 +21,7 @@ rama = "0.3.0-alpha.4"
 log = { workspace = true }
 rand = "0.10"
 tokio = { version = "1", features = ["full"] }
+http = "1.4.2"
 
 [dev-dependencies]
 tempfile = "3.20"

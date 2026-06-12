@@ -266,6 +266,7 @@ mod tests {
             request: Some(HttpRequest {
                 stream_id: ID(1),
                 version: vakil_plugin_sys::HttpVersion::Http11,
+                is_tls: false,
                 method: String::from("GET"),
                 authority: String::from("example.com"),
                 path: String::from("/health"),
@@ -371,6 +372,7 @@ mod tests {
             request: Some(HttpRequest {
                 stream_id: ID(1),
                 version: vakil_plugin_sys::HttpVersion::Http11,
+                is_tls: false,
                 method: String::from("GET"),
                 authority: String::from("example.com"),
                 path: String::from("/local-reply"),

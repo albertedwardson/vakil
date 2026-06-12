@@ -38,6 +38,10 @@ extern "C" fn http_init(
     _inst: *mut PluginInstanceOpaque,
     ctx: *const PluginInitContext,
 ) -> Result<(), PluginError> {
+    let _ =
+        env_logger::Builder::from_env(env_logger::Env::default().filter_or("RUST_LOG", "trace"))
+            .format_timestamp_millis()
+            .try_init();
     if let Some(ctx) = unsafe { ctx.as_ref() } {
         log_event(
             "inited",
@@ -62,24 +66,34 @@ extern "C" fn http_on_route(
     ctx: *mut HttpContext,
 ) -> Result<HookOutcome, PluginError> {
     let ctx = unsafe { ctx.as_mut() }.unwrap();
+    if ctx.request.is_none() {
+        return Result::Err(PluginError {
+            message: Some("no request provided to callback".into()).into(),
+        });
+    }
 
     let n = REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let (host, path) = if n.is_multiple_of(2) {
-        ("httpbin.dev", format!("/dump/request?n={n}"))
-    } else {
-        ("httpbin.org", format!("/anything?n={n}"))
+    let (host, path) = match n % 3 {
+        1 => ("httpbin.dev", format!("/dump/request?n={n}")),
+        2 => ("httpbin.org", format!("/anything?n={n}")),
+        0 => ("echo.free.beeceptor.com", format!("/?n={n}")),
+        _ => unreachable!(),
     };
 
-    ctx.route = Some(RouteDecision {
+    let is_route_ok = ctx.set_route(RouteDecision {
         action: RouteAction::ReplaceUpstream,
         upstream_to_set: Some(SocketAddress {
             host: host.into(),
-            port: 443,
+            port: 80,
         })
         .into(),
         http_path: Some(path.into()).into(),
-    })
-    .into();
+    });
+    if !is_route_ok {
+        return Result::Err(PluginError {
+            message: Some("failed to set route".into()).into(),
+        });
+    }
 
     log_event(
         "route",
@@ -298,6 +312,7 @@ mod tests {
             request: AbiOption::Some(HttpRequest {
                 stream_id: ID(1),
                 version: HttpVersion::Http11,
+                is_tls: false,
                 method: String::from("GET"),
                 authority: String::from("example.test"),
                 path: String::from(path),
@@ -325,6 +340,7 @@ mod tests {
             request: AbiOption::Some(HttpRequest {
                 stream_id: ID(1),
                 version: HttpVersion::Http11,
+                is_tls: false,
                 method: String::from("GET"),
                 authority: String::from("example.test"),
                 path: String::from("/local-reply"),

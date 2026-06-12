@@ -210,7 +210,13 @@ impl From<SocketAddress> for std::net::SocketAddr {
 }
 impl From<&SocketAddress> for std::net::SocketAddr {
     fn from(value: &SocketAddress) -> Self {
-        std::net::SocketAddr::new(value.host.parse().unwrap(), value.port)
+        std::net::SocketAddr::new(
+            value
+                .host
+                .parse()
+                .unwrap_or(std::net::Ipv4Addr::new(127, 0, 0, 1).into()),
+            value.port,
+        )
     }
 }
 impl From<SocketAddress> for std::string::String {
@@ -312,6 +318,7 @@ impl From<pingora_http::Version> for HttpVersion {
 pub struct HttpRequest {
     pub stream_id: ID,
     pub version: HttpVersion,
+    pub is_tls: bool,
     pub method: String,
     pub authority: String,
     pub path: String,
@@ -325,6 +332,7 @@ where
 {
     fn from(req: T) -> HttpRequest {
         let req = req.borrow();
+
         let method: String = req.method.as_str().into();
         let authority: String = req.uri.authority().map_or("", |v| v.as_str()).into();
         let path: String = req.uri.path().into();
@@ -335,6 +343,7 @@ where
         HttpRequest {
             stream_id: ID::new(),
             version,
+            is_tls: req.uri.scheme_str() == Some("https"),
             method,
             authority,
             path,
@@ -389,7 +398,6 @@ pub struct RouteDecision {
 pub struct HttpContext {
     pub request: Option<HttpRequest>,
     pub response: Option<HttpResponse>,
-    pub route: Option<RouteDecision>,
     pub transport: Option<TransportContext>,
 }
 #[cfg(feature = "pingora")]
@@ -420,9 +428,22 @@ where
         Self {
             request: Some(HttpRequest::from(req)).into(),
             response: Default::default(),
-            route: Some(RouteDecision::default()).into(),
             transport: Some(transport).into(),
         }
+    }
+}
+impl HttpContext {
+    pub fn route(&self) -> Option<RouteDecision> {
+        self.transport.as_ref().map(|t| t.route.clone()).into()
+    }
+
+    pub fn set_route(&mut self, route: RouteDecision) -> bool {
+        let Some(mut transport) = self.transport.as_mut() else {
+            return false;
+        };
+
+        transport.route = route;
+        true
     }
 }
 

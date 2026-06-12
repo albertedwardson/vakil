@@ -11,3 +11,4 @@ vakil-plugin-api = { path = "../../crates/vakil-plugin-api" }
 vakil-plugin-sys = { path = "../../crates/vakil-plugin-sys" }
 stabby = "72"
 log = { workspace = true }
+env_logger.workspace = true
